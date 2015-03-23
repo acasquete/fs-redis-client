@@ -1,5 +1,4 @@
 ﻿namespace Redis.Client.Net
-    
     open System
     open System.Globalization
     open System.IO
@@ -13,7 +12,7 @@
         inherit System.EventArgs()
         member x.Message = message
 
-    type MyCustomDelegate<'a> = 
+    type RedisMessageDelegate<'a> = 
         delegate of obj * RedisMessageReceiveEventArgs<'a> -> unit
 
     type RedisConnection(host, port, timeout, useSsl) = 
@@ -32,24 +31,27 @@
 
         let connectingEventArgsEvent = new Event<_>()
         let disconnectingEventArgsEvent = new Event<_>()
-        let customEventHandlerEvent = new Event<MyCustomDelegate<string>, RedisMessageReceiveEventArgs<string>>()
+        let customEventHandlerEvent = new Event<RedisMessageDelegate<string>, RedisMessageReceiveEventArgs<string>>()
 
         let (|Prefix|_|) (p:string) (s:string) =
             if s.StartsWith(p) then Some(s.Substring(p.Length)) else None
 
         let rec ParseLine (line, tabs) =
-            let parseNext() = 
+            let ParseNext() = 
                 ParseLine(inBuffer.ReadString(), tabs + 1)
 
-            let nestedArray size =
-                [| for i in 1..size -> sprintf "%s%d) %s\n" (String.replicate tabs " ") i (parseNext()) |]
+            let NestedArray size =
+                [| for i in 1..size -> sprintf "%s%s%d) %s" (if i>1 then "\n" else "") (String.replicate tabs " ") i (ParseNext()) |]
 
             match line with
-            | Prefix "*" rest -> rest |> int |> nestedArray |> Array.reduce (+) |> sprintf "%s"
+            | Prefix "*0" rest -> "(empty list or set)"
+            | Prefix "*" rest -> rest |> int |> NestedArray |> Array.reduce (+) |> sprintf "%s"
             | Prefix "$-1" rest -> "(nil)"
-            | Prefix "$" rest -> parseNext()
-            | Prefix ":" rest -> rest
-            | l -> l
+            | Prefix "$" rest -> sprintf @"""%s""" (ParseNext())
+            | Prefix ":" rest -> sprintf "(integer) %s" rest
+            | Prefix "-" rest when tabs = 1 -> sprintf "(error) %s" rest
+            | Prefix "+" rest when tabs > 1 -> rest
+            | _ -> line
 
         member x.StartRead =
             let buffer: byte [] = Array.zeroCreate BufferSize
@@ -67,52 +69,49 @@
                 x.StartRead
                  
         member x.Connect = 
-            if socket = null then
-                socket <- new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
-                socket.NoDelay <- true
-                socket.SendTimeout <- Timeout
-                socket.Connect(Host, Port)
+            socket <- new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+            socket.NoDelay <- true
+            socket.SendTimeout <- Timeout
+            socket.Connect(Host, Port)
 
-                if socket.Connected = false then
-                    socket.Close()
+            if socket.Connected = false then
+                socket.Close()
 
-                socketStream <- new NetworkStream(socket);
+            socketStream <- new NetworkStream(socket)
                 
-                if useSsl then
-                    let sslStream = new SslStream(socketStream, false, null, null)
-                    sslStream.AuthenticateAsClient(Host)
+            if useSsl then
+                let sslStream = new SslStream(socketStream, false, null, null)
+                sslStream.AuthenticateAsClient(Host)
 
-                    if (sslStream.IsEncrypted = false) then
-                        raise (System.Exception("Could not establish an encrypted connection to " + Host))
+                if (sslStream.IsEncrypted = false) then
+                    raise (System.Exception("Could not establish an encrypted connection to " + Host))
 
-                    socketStream <- sslStream;
+                socketStream <- sslStream;
 
-                x.OnConnecting
-
-        member x.SendBuffer =
-            try
-                outBuffer.StartRead()
-                let bytes: byte [] = Array.zeroCreate BufferSize
-                let bytesRead = outBuffer.Read(bytes, 0, bytes.Length)
-                socketStream.Write(bytes, 0, bytesRead)
-                outBuffer.Clear()
-                x.StartRead
-            with 
-            | :? SocketException -> 
-                    socket.Close()
-            true
+            x.OnConnecting
         
         member x.SendCommand([<ParamArray>] args : byte[][]) =
-            outBuffer.Write(System.Text.Encoding.ASCII.GetBytes("*" + args.Length.ToString()))
+            let SendBuffer() =
+                try
+                    outBuffer.StartRead()
+                    let bytes: byte [] = Array.zeroCreate BufferSize
+                    let bytesRead = outBuffer.Read(bytes, 0, bytes.Length)
+                    socketStream.Write(bytes, 0, bytesRead)
+                    outBuffer.Clear()
+                    x.StartRead
+                with 
+                | :? SocketException -> socket.Close()
+
+            outBuffer.Write(Text.Encoding.ASCII.GetBytes("*" + args.Length.ToString()))
             outBuffer.Write(EndData)
            
             for arg in args do
-                outBuffer.Write(System.Text.Encoding.ASCII.GetBytes("$" + arg.Length.ToString()))
+                outBuffer.Write(Text.Encoding.ASCII.GetBytes("$" + arg.Length.ToString()))
                 outBuffer.Write(EndData)
                 outBuffer.Write(arg)
                 outBuffer.Write(EndData)
 
-            x.SendBuffer
+            SendBuffer()
 
         member x.SendCommands([<ParamArray>] args:string[]) =
             x.SendCommand(args.ToByteArrays())
