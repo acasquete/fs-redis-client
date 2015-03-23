@@ -27,11 +27,11 @@ let main argv =
     try
         let host = "acasquete.redis.cache.windows.net"
         let port = 6380
-        let password = ""
+        let password = "yE4GhOiUtmUZX1ly46rTFnNGPfFuDLfjlOdkRhph/Is="
         let useSsl = port <> 6379
         
         let redis = new Redis.Client.Net.RedisConnection(host, port, 30, useSsl)
-
+        redis.Connect
         redis.MessageReceived.Add(fun (args) -> 
             let rewritePrompt = System.Console.CursorLeft > 0;
             System.Console.SetCursorPosition(0, System.Console.CursorTop);

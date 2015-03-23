@@ -24,7 +24,6 @@
 
         let mutable socket : Socket = null
         let mutable socketStream : Stream = null
-        let mutable indentCount = 0
 
         let Host : string = host
         let Port : int = port
@@ -34,27 +33,21 @@
         let connectingEventArgsEvent = new Event<_>()
         let disconnectingEventArgsEvent = new Event<_>()
         let customEventHandlerEvent = new Event<MyCustomDelegate<string>, RedisMessageReceiveEventArgs<string>>()
- 
-        let rec ParseLine (line:string) =
-            let sb = new StringBuilder()
-            if line.StartsWith("*") then
-                let size = Int32.Parse(line.Substring(1))
-                sb.AppendLine ("Array[" + size.ToString() + "]") |> ignore
-                for i in 1 .. size do
-                    indentCount <- indentCount + 1
-                    sb.AppendLine(new String(' ', indentCount * 2) + (i + 1).ToString() + ") " + ParseLine(inBuffer.ReadString())) |> ignore
-                    indentCount <- indentCount - 1
-            elif (line.StartsWith("$-1")) then
-                sb.Append ("(nil)") |> ignore
-            elif (line.StartsWith("$")) then
-                sb.Append(ParseLine(inBuffer.ReadString())) |> ignore
-            elif (line.StartsWith(":")) then
-                sb.Append(line.Substring(1)) |> ignore
-            else
-                sb.Append(line) |> ignore
 
-            sb.ToString()
-        
+        let rec ParseLine (line, tabs) =
+            let parseNext() = 
+                ParseLine(inBuffer.ReadString(), tabs + 1)
+
+            match line with
+            | l when l.StartsWith("*") -> 
+                let size = line.[1] |> string |> int
+                (size, ([ for i in 1..size -> sprintf "%s%d) %s \n" (String.replicate tabs " ") i (parseNext()) ] 
+                        |> List.reduce (+) )) ||> sprintf "Array %d\n%s"
+            | l when l.StartsWith("$-1") -> "(nil)"
+            | l when l.StartsWith("$") -> parseNext()
+            | l when l.StartsWith(":") -> string l.[1]
+            | l -> l
+
         member x.EndReceive (ar: IAsyncResult) = 
             if socketStream = null then
                 printf "error"
@@ -69,7 +62,7 @@
                     if inBuffer.Length > 0 then
                         inBuffer.StartRead()
                         let s = inBuffer.ReadString()
-                        let message = ParseLine(s)
+                        let message = ParseLine(s, 1)
                         x.OnMessageReceive(message)
                         inBuffer.Clear()
                 else
@@ -109,12 +102,6 @@
                 x.BeginReceive
 
         member x.SendBuffer =
-            if socket = null then
-                x.Connect
-
-            if socket = null then
-                ()
-
             try
                 outBuffer.StartRead()
                 let bytes: byte [] = Array.zeroCreate BufferSize
@@ -128,9 +115,6 @@
             true
         
         member x.SendCommand([<ParamArray>] args : byte[][]) =
-            if (socket = null) then
-                x.Connect
-            
             outBuffer.Write(System.Text.Encoding.ASCII.GetBytes("*" + args.Length.ToString()))
             outBuffer.Write(EndData)
            
