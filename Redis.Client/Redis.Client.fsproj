@@ -51,6 +51,7 @@
     <Compile Include="RedisConnection.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
+    <Compile Include="Redis.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Redis.Client.Utilities\Redis.Client.Utilities.csproj">

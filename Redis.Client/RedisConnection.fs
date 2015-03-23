@@ -41,8 +41,8 @@
             match line with
             | l when l.StartsWith("*") -> 
                 let size = line.[1] |> string |> int
-                (size, ([ for i in 1..size -> sprintf "%s%d) %s \n" (String.replicate tabs " ") i (parseNext()) ] 
-                        |> List.reduce (+) )) ||> sprintf "Array %d\n%s"
+                (size, ([ for i in 1..size -> sprintf "%s%d) %s\n" (String.replicate tabs " ") i (parseNext()) ] 
+                        |> List.reduce (+) )) ||> sprintf "Array[%d]\n%s"
             | l when l.StartsWith("$-1") -> "(nil)"
             | l when l.StartsWith("$") -> parseNext()
             | l when l.StartsWith(":") -> string l.[1]
