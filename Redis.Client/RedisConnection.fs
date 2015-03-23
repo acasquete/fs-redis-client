@@ -44,6 +44,7 @@
                 [| for i in 1..size -> sprintf "%s%s%d) %s" (if i>1 then "\n" else "") (String.replicate tabs " ") i (ParseNext()) |]
 
             match line with
+            | "" -> ""
             | Prefix "*0" rest -> "(empty list or set)"
             | Prefix "*" rest -> rest |> int |> NestedArray |> Array.reduce (+) |> sprintf "%s"
             | Prefix "$-1" rest -> "(nil)"
@@ -51,7 +52,7 @@
             | Prefix ":" rest -> sprintf "(integer) %s" rest
             | Prefix "-" rest when tabs = 1 -> sprintf "(error) %s" rest
             | Prefix "+" rest when tabs > 1 -> rest
-            | _ -> line
+            | line -> sprintf "%s" line + (ParseNext())
 
         member x.StartRead =
             let buffer: byte [] = Array.zeroCreate BufferSize

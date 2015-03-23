@@ -64,9 +64,9 @@
         public string ReadString()
         {
             var sb = new StringBuilder();
-            int c;
+            int c = 0;
 
-            while ((c = this.reader.ReadByte()) != -1)
+            while (this.buffer.Position < this.length && (c = this.reader.ReadByte()) != -1)
             {
                 if (c == '\r')
                     continue;
