@@ -34,48 +34,38 @@
         let disconnectingEventArgsEvent = new Event<_>()
         let customEventHandlerEvent = new Event<MyCustomDelegate<string>, RedisMessageReceiveEventArgs<string>>()
 
+        let (|Prefix|_|) (p:string) (s:string) =
+            if s.StartsWith(p) then Some(s.Substring(p.Length)) else None
+
         let rec ParseLine (line, tabs) =
             let parseNext() = 
                 ParseLine(inBuffer.ReadString(), tabs + 1)
 
+            let nestedArray size =
+                [| for i in 1..size -> sprintf "%s%d) %s\n" (String.replicate tabs " ") i (parseNext()) |]
+
             match line with
-            | l when l.StartsWith("*") -> 
-                let size = line.[1] |> string |> int
-                (size, ([ for i in 1..size -> sprintf "%s%d) %s\n" (String.replicate tabs " ") i (parseNext()) ] 
-                        |> List.reduce (+) )) ||> sprintf "Array[%d]\n%s"
-            | l when l.StartsWith("$-1") -> "(nil)"
-            | l when l.StartsWith("$") -> parseNext()
-            | l when l.StartsWith(":") -> string l.[1]
+            | Prefix "*" rest -> rest |> int |> nestedArray |> Array.reduce (+) |> sprintf "%s"
+            | Prefix "$-1" rest -> "(nil)"
+            | Prefix "$" rest -> parseNext()
+            | Prefix ":" rest -> rest
             | l -> l
 
-        member x.EndReceive (ar: IAsyncResult) = 
-            if socketStream = null then
-                printf "error"
-
-            let buffer = ar.AsyncState :?> byte[]
-            
-            try
-                let read = socketStream.EndRead(ar)
-                inBuffer.Write(buffer, 0, read)
-
-                if read < buffer.Length then
-                    if inBuffer.Length > 0 then
-                        inBuffer.StartRead()
-                        let s = inBuffer.ReadString()
-                        let message = ParseLine(s, 1)
-                        x.OnMessageReceive(message)
-                        inBuffer.Clear()
-                else
-                    x.BeginReceive
-            with 
-            | :? IOException -> printf "error" 
-
-            x.BeginReceive
-
-        member x.BeginReceive =
+        member x.StartRead =
             let buffer: byte [] = Array.zeroCreate BufferSize
-            socketStream.BeginRead(buffer, 0, buffer.Length, (fun ar -> x.EndReceive ar), buffer) |> ignore
-                
+            let read = socketStream.Read(buffer, 0, buffer.Length)
+            inBuffer.Write(buffer, 0, read)
+
+            if read < buffer.Length then
+                if inBuffer.Length > 0 then
+                    inBuffer.StartRead()
+                    let s = inBuffer.ReadString()
+                    let message = ParseLine(s, 1)
+                    x.OnMessageReceive(message)
+                    inBuffer.Clear()
+            else 
+                x.StartRead
+                 
         member x.Connect = 
             if socket = null then
                 socket <- new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
@@ -85,7 +75,6 @@
 
                 if socket.Connected = false then
                     socket.Close()
-                    socket <- null
 
                 socketStream <- new NetworkStream(socket);
                 
@@ -99,7 +88,6 @@
                     socketStream <- sslStream;
 
                 x.OnConnecting
-                x.BeginReceive
 
         member x.SendBuffer =
             try
@@ -108,10 +96,10 @@
                 let bytesRead = outBuffer.Read(bytes, 0, bytes.Length)
                 socketStream.Write(bytes, 0, bytesRead)
                 outBuffer.Clear()
+                x.StartRead
             with 
             | :? SocketException -> 
                     socket.Close()
-                    socket <- null
             true
         
         member x.SendCommand([<ParamArray>] args : byte[][]) =
@@ -152,9 +140,7 @@
                 x.OnDisconnecting
                 socket.Close()
                 outBuffer.Dispose()
-                socket <- null
                 socketStream.Dispose()
-                socketStream <- null
         
         interface System.IDisposable with 
             member x.Dispose() = 

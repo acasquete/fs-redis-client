@@ -1,16 +1,16 @@
-﻿let writePrompt() =
-    System.Console.Write "> "
+﻿let writePrompt (host:string, port) =
+    printf "%s:%d> " host port
 
-let AutoAuth(redis : Redis.Client.Net.RedisConnection, password : string) =
-    writePrompt()
+let AutoAuth(redis : Redis.Client.Net.RedisConnection, password : string, host, port) =
+    writePrompt(host,port)
     System.Console.WriteLine "AUTH ***********"
     redis.SendCommands ("AUTH", password)
 
 let parse (line:string) = 
     line.Split(' ')
 
-let rec readCommand (redis : Redis.Client.Net.RedisConnection) = 
-    writePrompt()
+let rec readCommand (redis : Redis.Client.Net.RedisConnection, host, port) = 
+    writePrompt(host,port)
     let command = System.Console.ReadLine()
 
     if (System.String.IsNullOrEmpty(command)) then
@@ -20,7 +20,7 @@ let rec readCommand (redis : Redis.Client.Net.RedisConnection) =
     elif command.ToUpper() = "QUIT" then
         ()
        
-    readCommand redis |> ignore   
+    readCommand (redis, host, port) |> ignore   
 
 [<EntryPoint>]
 let main argv = 
@@ -33,13 +33,10 @@ let main argv =
         let redis = new Redis.Client.Net.RedisConnection(host, port, 30, useSsl)
         redis.Connect
         redis.MessageReceived.Add(fun (args) -> 
-            let rewritePrompt = System.Console.CursorLeft > 0;
-            System.Console.SetCursorPosition(0, System.Console.CursorTop);
-
             let foreGroundColor = System.Console.ForegroundColor;
             let messageColor = 
                 match args.Message with
-                | x when x.StartsWith("-") -> System.ConsoleColor.Red
+                | x when x.StartsWith("-ERR") -> System.ConsoleColor.Red
                 | x when x.StartsWith("(nil)") -> System.ConsoleColor.Blue
                 | x when x.StartsWith("+") -> System.ConsoleColor.Green
                 | _ -> System.ConsoleColor.DarkGray
@@ -47,13 +44,10 @@ let main argv =
             System.Console.ForegroundColor <- messageColor
             System.Console.WriteLine(args.Message);
             System.Console.ForegroundColor <- foreGroundColor;
-
-            if rewritePrompt then
-                writePrompt()
         )
             
-        AutoAuth(redis, password) |> ignore
-        readCommand (redis)
+        AutoAuth(redis, password, host, port) |> ignore
+        readCommand (redis, host, port)
         //redis.MessageReceived -= OnMessageReceived;
         0
 
