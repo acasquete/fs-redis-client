@@ -36,18 +36,21 @@ let main argv =
             let rewritePrompt = System.Console.CursorLeft > 0;
             System.Console.SetCursorPosition(0, System.Console.CursorTop);
 
-            let color = System.Console.ForegroundColor;
+            let foreGroundColor = System.Console.ForegroundColor;
+            let messageColor = 
+                match args.Message with
+                | x when x.StartsWith("-") -> System.ConsoleColor.Red
+                | x when x.StartsWith("(nil)") -> System.ConsoleColor.Blue
+                | x when x.StartsWith("+") -> System.ConsoleColor.Green
+                | _ -> System.ConsoleColor.DarkGray
 
-            if (args.Message.StartsWith("-")) then System.Console.ForegroundColor <- System.ConsoleColor.Red
-            elif (args.Message.StartsWith("(nil)")) then System.Console.ForegroundColor <- System.ConsoleColor.Blue
-            elif (args.Message.StartsWith("+")) then System.Console.ForegroundColor <- System.ConsoleColor.Green
-            else System.Console.ForegroundColor <- System.ConsoleColor.DarkGray;
-
+            System.Console.ForegroundColor <- messageColor
             System.Console.WriteLine(args.Message);
+            System.Console.ForegroundColor <- foreGroundColor;
 
-            System.Console.ForegroundColor <- color;
             if rewritePrompt then
-                writePrompt())
+                writePrompt()
+        )
             
         AutoAuth(redis, password) |> ignore
         readCommand (redis)
