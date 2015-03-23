@@ -24,7 +24,8 @@ let rec readCommand (redis : RedisConnection, host, port) =
     match command with
     | x when String.IsNullOrEmpty(x) -> ()
     | x when command.ToUpper() = "QUIT" -> ()
-    | x -> redis.SendCommands(parse(x))
+    | x when command.ToUpper() = "CLEAR" -> Console.Clear()
+    | _ -> redis.SendCommands(parse(command))
        
     readCommand (redis, host, port) |> ignore   
 
