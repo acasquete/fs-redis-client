@@ -1,30 +1,33 @@
-﻿let AutoAuth(redis : Redis.Client.Net.RedisConnection, password : string) =
+﻿let writePrompt() =
+    System.Console.Write "> "
+
+let AutoAuth(redis : Redis.Client.Net.RedisConnection, password : string) =
+    writePrompt()
     System.Console.WriteLine "AUTH ***********"
     redis.SendCommands ("AUTH", password)
-
-let writePrompt =
-    System.Console.Write "> "
 
 let parse (line:string) = 
     line.Split(' ')
 
 let rec readCommand (redis : Redis.Client.Net.RedisConnection) = 
-    writePrompt
+    writePrompt()
     let command = System.Console.ReadLine()
 
-    if command.ToUpper() = "QUIT" then
-        printf "Exiting..."
+    if (System.String.IsNullOrEmpty(command)) then
+        ()
     elif redis.SendCommands(parse(command)) = false then
-        System.Console.WriteLine("Error: could not send the command");
+        System.Console.WriteLine("Error: could not send the command")
+    elif command.ToUpper() = "QUIT" then
+        ()
        
-    readCommand redis |> ignore
+    readCommand redis |> ignore   
 
 [<EntryPoint>]
 let main argv = 
     try
         let host = "acasquete.redis.cache.windows.net"
         let port = 6380
-        let password = "yE4GhOiUtmUZX1ly46rTFnNGPfFuDLfjlOdkRhph/Is="
+        let password = ""
         let useSsl = port <> 6379
         
         let redis = new Redis.Client.Net.RedisConnection(host, port, 30, useSsl)
@@ -36,7 +39,7 @@ let main argv =
             let color = System.Console.ForegroundColor;
 
             if (args.Message.StartsWith("-")) then System.Console.ForegroundColor <- System.ConsoleColor.Red
-            elif (args.Message.StartsWith("(nil)")) then System.Console.ForegroundColor <- System.ConsoleColor.Yellow
+            elif (args.Message.StartsWith("(nil)")) then System.Console.ForegroundColor <- System.ConsoleColor.Blue
             elif (args.Message.StartsWith("+")) then System.Console.ForegroundColor <- System.ConsoleColor.Green
             else System.Console.ForegroundColor <- System.ConsoleColor.DarkGray;
 
@@ -44,7 +47,7 @@ let main argv =
 
             System.Console.ForegroundColor <- color;
             if rewritePrompt then
-                writePrompt)
+                writePrompt())
             
         AutoAuth(redis, password) |> ignore
         readCommand (redis)

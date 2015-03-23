@@ -11,10 +11,10 @@
 
     type RedisMessageReceiveEventArgs<'a>(message : string) =
         inherit System.EventArgs()
- 
-        member this.Message = message
+        member x.Message = message
 
-    type MyCustomDelegate<'a> = delegate of obj * RedisMessageReceiveEventArgs<'a> -> unit
+    type MyCustomDelegate<'a> = 
+        delegate of obj * RedisMessageReceiveEventArgs<'a> -> unit
 
     type RedisConnection(host, port, timeout, useSsl) = 
         let BufferSize = 16 * 1024
@@ -35,20 +35,6 @@
         let disconnectingEventArgsEvent = new Event<_>()
         let customEventHandlerEvent = new Event<MyCustomDelegate<string>, RedisMessageReceiveEventArgs<string>>()
  
-//        override this.Dispose(disposing) = 
-//             if (disposing) then
-//                this.OnDisconnecting();
-//                this.socket.Close();
-//                this.outBuffer.Dispose();
-//                this.socket = null;
-//                this.socketStream.Dispose();
-//                this.socketStream = null;
-//        
-//        interface System.IDisposable with 
-//            member this.Dispose() = 
-//                this.Dispose(true);
-//                GC.SuppressFinalize(this);
-
         let rec ParseLine (line:string) =
             let sb = new StringBuilder()
             if line.StartsWith("*") then
@@ -68,11 +54,10 @@
                 sb.Append(line) |> ignore
 
             sb.ToString()
-
         
-        member this.EndReceive(ar : IAsyncResult) = 
+        member x.EndReceive (ar: IAsyncResult) = 
             if socketStream = null then
-                printf "aaa"
+                printf "error"
 
             let buffer = ar.AsyncState :?> byte[]
             
@@ -83,23 +68,22 @@
                 if read < buffer.Length then
                     if inBuffer.Length > 0 then
                         inBuffer.StartRead()
-                        let message = ParseLine(inBuffer.ReadString())
-                        this.OnMessageReceive(message)
+                        let s = inBuffer.ReadString()
+                        let message = ParseLine(s)
+                        x.OnMessageReceive(message)
                         inBuffer.Clear()
                 else
-                    this.BeginReceive
+                    x.BeginReceive
             with 
-            | :? IOException -> printf "a" 
+            | :? IOException -> printf "error" 
 
-            this.BeginReceive
+            x.BeginReceive
 
-        member this.BeginReceive =
+        member x.BeginReceive =
             let buffer: byte [] = Array.zeroCreate BufferSize
-        
-            if socketStream <> null then
-                socketStream.BeginRead(buffer, 0, buffer.Length, (fun ar -> this.EndReceive ar), buffer) |> ignore
+            socketStream.BeginRead(buffer, 0, buffer.Length, (fun ar -> x.EndReceive ar), buffer) |> ignore
                 
-        member this.Connect = 
+        member x.Connect = 
             if socket = null then
                 socket <- new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
                 socket.NoDelay <- true
@@ -121,15 +105,12 @@
 
                     socketStream <- sslStream;
 
-                this.OnConnecting
-                this.BeginReceive
-            else
-                printf "a"
+                x.OnConnecting
+                x.BeginReceive
 
-
-        member this.SendBuffer =
+        member x.SendBuffer =
             if socket = null then
-                this.Connect
+                x.Connect
 
             if socket = null then
                 ()
@@ -139,15 +120,16 @@
                 let bytes: byte [] = Array.zeroCreate BufferSize
                 let bytesRead = outBuffer.Read(bytes, 0, bytes.Length)
                 socketStream.Write(bytes, 0, bytesRead)
+                outBuffer.Clear()
             with 
             | :? SocketException -> 
                     socket.Close()
                     socket <- null
             true
         
-        member this.SendCommand([<ParamArray>] args : byte[][]) =
-            //if (this.socket == null)
-            this.Connect
+        member x.SendCommand([<ParamArray>] args : byte[][]) =
+            if (socket = null) then
+                x.Connect
             
             outBuffer.Write(System.Text.Encoding.ASCII.GetBytes("*" + args.Length.ToString()))
             outBuffer.Write(EndData)
@@ -158,25 +140,39 @@
                 outBuffer.Write(arg)
                 outBuffer.Write(EndData)
 
-            this.SendBuffer
+            x.SendBuffer
 
-        member this.SendCommands([<ParamArray>] args:string[]) =
-            this.SendCommand(args.ToByteArrays())
+        member x.SendCommands([<ParamArray>] args:string[]) =
+            x.SendCommand(args.ToByteArrays())
 
         [<CLIEvent>]
-        member this.Connecting = connectingEventArgsEvent.Publish
+        member x.Connecting = connectingEventArgsEvent.Publish
        
         [<CLIEvent>]
-        member this.Disconnecting = disconnectingEventArgsEvent.Publish
+        member x.Disconnecting = disconnectingEventArgsEvent.Publish
 
         [<CLIEvent>]
-        member this.MessageReceived = customEventHandlerEvent.Publish
+        member x.MessageReceived = customEventHandlerEvent.Publish
  
-        member this.OnConnecting =
+        member x.OnConnecting =
             connectingEventArgsEvent.Trigger()
 
-        member this.OnDisconnecting =
+        member x.OnDisconnecting =
             disconnectingEventArgsEvent.Trigger()
 
-        member this.OnMessageReceive x =
-            customEventHandlerEvent.Trigger(this, new RedisMessageReceiveEventArgs<_>(x))
+        member x.OnMessageReceive message =
+            customEventHandlerEvent.Trigger(x, new RedisMessageReceiveEventArgs<_>(message))
+
+        member x.Dispose(disposing) = 
+             if (disposing) then
+                x.OnDisconnecting
+                socket.Close()
+                outBuffer.Dispose()
+                socket <- null
+                socketStream.Dispose()
+                socketStream <- null
+        
+        interface System.IDisposable with 
+            member x.Dispose() = 
+                x.Dispose(true);
+                GC.SuppressFinalize(x);
