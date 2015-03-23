@@ -163,8 +163,6 @@
         member this.SendCommands([<ParamArray>] args:string[]) =
             this.SendCommand(args.ToByteArrays())
 
-        member this.Connected with get () = if socket <> null then socket.Connected else false
-
         [<CLIEvent>]
         member this.Connecting = connectingEventArgsEvent.Publish
        
