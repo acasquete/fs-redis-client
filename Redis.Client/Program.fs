@@ -13,7 +13,7 @@ let parseCommand (line:string) =
 let parseResponse (line:string) = 
     match line with
     | Prefix "+" rest -> rest 
-    | l when l.Contains("\r") -> line.[2..line.Length-2]
+    | l when l.Contains("\r") -> line.[1..line.Length-2]
     | _ -> line
 
 let rec readCommand (redis:RedisConnection) = 
