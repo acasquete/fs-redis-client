@@ -3,39 +3,31 @@ open Redis.Client.Net
 open System.Configuration
 open Redis.Client.Net.Common
 
-let writePrompt (host, port) =
-    (host, port) ||> printf "%s:%d> " 
-
-let AutoAuth(redis : RedisConnection, password : string, host, port) =
-    writePrompt(host,port)
-    Console.WriteLine "AUTH ***********"
-    redis.SendCommands ("AUTH", password)
-
-let parse (line:string) = 
-    line.Split(' ')
+let parseCommand (line:string) = 
+    line.Split(' ') //TODO: Parse quotes
 
 let parseResponse (line:string) = 
     match line with
-    | x when x.StartsWith("+") -> x.Substring(1)
+    | Prefix "+" rest -> rest
     | _ -> line
 
-let rec readCommand (redis:RedisConnection, host, port) = 
-    writePrompt(host,port)
+let rec readCommand (redis:RedisConnection) = 
+    redis.WritePrompt
     let command = Console.ReadLine()
 
     match command with
-    | c when String.IsNullOrEmpty(c) -> ()
+    | c when notHasContent c -> ()
     | c when command.ToUpper() = "QUIT" -> ()
     | c when command.ToUpper() = "CLEAR" -> Console.Clear()
-    | c -> redis.SendCommands(parse(c))
+    | c -> c |> parseCommand |> redis.SendCommands
        
-    readCommand (redis, host, port)
+    redis |> readCommand 
 
-let getArgumentValue (name:string, defaultValue, args:string[], index) =
+let getArgument (index) (name: string) (defaultValue) (args:string[]) =
     if args.Length > index then
-        string args.[index]
-    elif String.IsNullOrEmpty(ConfigurationManager.AppSettings.[name]) = false then
-        string Configuration.ConfigurationManager.AppSettings.[name]
+        args.[index]
+    elif hasContent ConfigurationManager.AppSettings.[name] then
+        ConfigurationManager.AppSettings.[name]
     else defaultValue
 
 let messageReceived (args:RedisMessageReceiveEventArgs<string>) =
@@ -48,25 +40,22 @@ let messageReceived (args:RedisMessageReceiveEventArgs<string>) =
         | _                  -> ConsoleColor.DarkGray
 
     Console.ForegroundColor <- messageColor
-    (parseResponse(args.Message)) |> printfn "%s"
+    parseResponse(args.Message) |> printfn "%s"
     Console.ForegroundColor <- foregroundColor
 
 [<EntryPoint>]
 let main argv = 
     try
-        let host = getArgumentValue("Host", "localhost", argv, 0 )
-        let port = getArgumentValue("Port", "6379", argv, 1 ) |> int
-        let password = getArgumentValue("Password", String.Empty, argv, 2 )
-        let useSsl = port <> 6379
-        
-        let redis = new RedisConnection(host, port, 30, useSsl)
-        redis.Connect
+        let host     = argv |> getArgument 0 "Host" "localhost"
+        let port     = argv |> getArgument 1 "Port" "6379" |> int
+        let password = argv |> getArgument 2 "Password" ""
+        let alias    = argv |> getArgument 3 "Alias" ""
+        let useSsl   = port <> 6379
+        let redis = new RedisConnection(host, port, 30, useSsl, alias)
         redis.MessageReceived.Add(fun args -> messageReceived args)
-            
-        AutoAuth(redis, password, host, port) |> ignore
-        readCommand (redis, host, port)
+        redis.Connect password
+        redis |> readCommand
         0
-
     with 
         | :? System.Exception as ex -> printfn "%s" ex.Message 
                                        0

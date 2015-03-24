@@ -16,7 +16,7 @@
     type RedisMessageDelegate<'a> = 
         delegate of obj * RedisMessageReceiveEventArgs<'a> -> unit
 
-    type RedisConnection(host, port, timeout, useSsl) = 
+    type RedisConnection(host, port, timeout, useSsl, alias) = 
         let BufferSize = 16 * 1024
         let EndData = [| byte('\r'); byte('\n') |]
         let outBuffer = new ByteBuffer()
@@ -25,8 +25,9 @@
         let mutable socket : Socket = null
         let mutable socketStream : Stream = null
 
-        let Host : string = host
-        let Port : int = port
+        let Host  : string = host
+        let Port  : int = port
+        let Alias : string = alias
         let Timeout = timeout
         let useSsl = useSsl
 
@@ -52,6 +53,9 @@
             | Prefix "+" rest when tabs > 1 -> rest
             | line -> sprintf "%s" line + (ParseNext())
 
+        member x.WritePrompt =
+            ((if hasContent Alias then Alias else Host), Port) ||> printf "%s:%d> " 
+
         member x.StartRead =
             let buffer: byte [] = Array.zeroCreate BufferSize
             let read = socketStream.Read(buffer, 0, buffer.Length)
@@ -67,7 +71,7 @@
             else 
                 x.StartRead
                  
-        member x.Connect = 
+        member x.Connect password = 
             socket <- new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
             socket.NoDelay <- true
             socket.SendTimeout <- Timeout
@@ -88,8 +92,10 @@
                 socketStream <- sslStream;
 
             x.OnConnecting
+
+            if hasContent password then x.AutoAuth password
         
-        member x.SendCommand([<ParamArray>] args : byte[][]) =
+        member x.SendCommand(args : byte[][]) =
             let SendBuffer() =
                 try
                     outBuffer.StartRead()
@@ -112,8 +118,13 @@
 
             SendBuffer()
 
-        member x.SendCommands([<ParamArray>] args:string[]) =
+        member x.SendCommands(args) =
             x.SendCommand(args.ToByteArrays())
+
+        member x.AutoAuth password =
+            x.WritePrompt
+            printfn "AUTH ********"
+            [|"AUTH"; password|] |> x.SendCommands
 
         [<CLIEvent>]
         member x.Connecting = connectingEventArgsEvent.Publish
