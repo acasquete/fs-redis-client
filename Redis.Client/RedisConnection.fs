@@ -21,7 +21,7 @@
         let EndData = [| byte('\r'); byte('\n') |]
         let outBuffer = new ByteBuffer()
         let inBuffer = new ByteBuffer()
-        let socket : Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+        let socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
 
         let mutable socketStream : Stream = null
 
