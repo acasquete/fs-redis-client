@@ -33,13 +33,12 @@
             let ParseNext() = 
                 x.ParseLine(x.ReadLine(), tabs + 1)
 
-            let NestedArray size =
+            let NestedArray size = // TODO: Fix tabs (nested arrays??)
                 [| for i in 1..size -> sprintf "%s%s%d) %s" (if i>1 then "\n" else "") (String.replicate tabs " ") i (ParseNext()) |]
 
             let NestedString size =
                 let sb = new StringBuilder()
-                while sb.Length <= size do
-                    sb.AppendLine(string <| x.ReadLine()) |> ignore
+                while sb.Length <= size do sb.AppendLine(string <| x.ReadLine()) |> ignore
                 sb.ToString().TrimEnd(char "\r", char "\n")        
 
             match line with
