@@ -2,9 +2,13 @@
 open Redis.Client.Net
 open System.Configuration
 open Redis.Client.Net.Common
+open System.Text.RegularExpressions
 
 let parseCommand (line:string) = 
-    line.Trim().Split(' ') //TODO: Parse quotes
+    Regex.Matches(line.Trim(), @"(?<m>\w+)|\""(?<m>[\s\S.]*)""")
+    |> Seq.cast<Match>
+    |> Seq.map (fun x -> x.Groups.["m"].Value)
+    |> Seq.toArray
 
 let parseResponse (line:string) = 
     match line with
