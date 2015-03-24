@@ -7,6 +7,7 @@
     open System.Text
     open System.Threading
     open Redis.Client.Utilities
+    open Redis.Client.Net.Common
 
     type RedisMessageReceiveEventArgs<'a>(message : string) =
         inherit System.EventArgs()
@@ -33,9 +34,6 @@
         let disconnectingEventArgsEvent = new Event<_>()
         let customEventHandlerEvent = new Event<RedisMessageDelegate<string>, RedisMessageReceiveEventArgs<string>>()
 
-        let (|Prefix|_|) (p:string) (s:string) =
-            if s.StartsWith(p) then Some(s.Substring(p.Length)) else None
-
         let rec ParseLine (line, tabs) =
             let ParseNext() = 
                 ParseLine(inBuffer.ReadString(), tabs + 1)
@@ -45,10 +43,10 @@
 
             match line with
             | "" -> ""
-            | Prefix "*0" rest -> "(empty list or set)"
+            | Prefix "*0" _ -> "(empty list or set)"
             | Prefix "*" rest -> rest |> int |> NestedArray |> Array.reduce (+) |> sprintf "%s"
-            | Prefix "$-1" rest -> "(nil)"
-            | Prefix "$" rest -> sprintf @"""%s""" (ParseNext())
+            | Prefix "$-1" _ -> "(nil)"
+            | Prefix "$" _ -> sprintf @"""%s""" (ParseNext())
             | Prefix ":" rest -> sprintf "(integer) %s" rest
             | Prefix "-" rest when tabs = 1 -> sprintf "(error) %s" rest
             | Prefix "+" rest when tabs > 1 -> rest
