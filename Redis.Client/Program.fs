@@ -8,7 +8,7 @@ let parseCommand (line:string) =
 
 let parseResponse (line:string) = 
     match line with
-    | Prefix "+" rest -> rest
+    | Prefix "+" rest -> rest 
     | l when l.Contains("\r") -> line.[2..line.Length-2]
     | _ -> line
 

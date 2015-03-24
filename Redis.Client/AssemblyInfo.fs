@@ -10,9 +10,9 @@ open System.Runtime.InteropServices
 [<assembly: AssemblyTitle("Redis.Client")>]
 [<assembly: AssemblyDescription("")>]
 [<assembly: AssemblyConfiguration("")>]
-[<assembly: AssemblyCompany("")>]
+[<assembly: AssemblyCompany("Alex Casquete")>]
 [<assembly: AssemblyProduct("Redis.Client")>]
-[<assembly: AssemblyCopyright("Copyright ©  2015")>]
+[<assembly: AssemblyCopyright("Copyright © 2015")>]
 [<assembly: AssemblyTrademark("")>]
 [<assembly: AssemblyCulture("")>]
 

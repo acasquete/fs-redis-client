@@ -40,8 +40,7 @@
                 let sb = new StringBuilder()
                 while sb.Length <= size do
                     sb.AppendLine(string <| x.ReadLine()) |> ignore
-                let a = sb.ToString()         
-                a.TrimEnd(char "\r", char "\n")
+                sb.ToString().TrimEnd(char "\r", char "\n")        
 
             match line with
             | Prefix "*0" _   -> "(empty list or set)"
@@ -99,12 +98,12 @@
                 socketStream.Write(bytes, 0, bytes.Length)
 
             let sb = new StringBuilder()
-            sb.Append("*" + args.Length.ToString() + "\r\n") |> ignore
+            sb.Append("*" + string args.Length + "\r\n") |> ignore
             args 
-            |> Array.iter (fun item -> sb.Append("$" + item.Length.ToString() + "\r\n") |> ignore
-                                       sb.Append(item.ToString() + "\r\n") |> ignore)
+            |> Array.iter (fun item -> sb.Append("$" + string item.Length + "\r\n") |> ignore
+                                       sb.Append(item + "\r\n") |> ignore)
 
-            SendBuffer(sb.ToString())
+            sb |> string |> SendBuffer
             x.StartRead()
 
         member x.AutoAuth password =
