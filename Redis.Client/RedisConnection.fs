@@ -6,7 +6,6 @@
     open System.Net.Sockets
     open System.Text
     open System.Threading
-    open Redis.Client.Utilities
     open Redis.Client.Net.Common
 
     type RedisMessageReceiveEventArgs<'a>(message : string) =
@@ -18,13 +17,8 @@
 
     type RedisConnection(host, port, timeout, useSsl, alias) = 
         let BufferSize = 16 * 1024
-        let EndData = [| byte('\r'); byte('\n') |]
-        let outBuffer = new ByteBuffer()
-        let inBuffer = new ByteBuffer()
         let socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
-
         let mutable socketStream : Stream = null
-
         let Host  : string = host
         let Port  : int = port
         let Alias : string = alias
@@ -35,19 +29,25 @@
         let disconnectingEventArgsEvent = new Event<_>()
         let customEventHandlerEvent = new Event<RedisMessageDelegate<string>, RedisMessageReceiveEventArgs<string>>()
 
-        let rec ParseLine (line, tabs) =
+        member x.ParseLine (line, tabs) =
             let ParseNext() = 
-                ParseLine(inBuffer.ReadString(), tabs + 1)
+                x.ParseLine(x.ReadLine(), tabs + 1)
 
             let NestedArray size =
                 [| for i in 1..size -> sprintf "%s%s%d) %s" (if i>1 then "\n" else "") (String.replicate tabs " ") i (ParseNext()) |]
 
+            let NestedString size =
+                let sb = new StringBuilder()
+                while sb.Length <= size do
+                    sb.AppendLine(string <| x.ReadLine()) |> ignore
+                let a = sb.ToString()         
+                a.TrimEnd(char "\r", char "\n")
+
             match line with
-            | "" -> ""
-            | Prefix "*0" _ -> "(empty list or set)"
+            | Prefix "*0" _   -> "(empty list or set)"
+            | Prefix "$-1" _  -> "(nil)"
             | Prefix "*" rest -> rest |> int |> NestedArray |> Array.reduce (+) |> sprintf "%s"
-            | Prefix "$-1" _ -> "(nil)"
-            | Prefix "$" _ -> sprintf @"""%s""" (ParseNext())
+            | Prefix "$" rest -> rest |> int |> NestedString |> sprintf "\"%s\""
             | Prefix ":" rest -> sprintf "(integer) %s" rest
             | Prefix "-" rest when tabs = 1 -> sprintf "(error) %s" rest
             | Prefix "+" rest when tabs > 1 -> rest
@@ -56,23 +56,22 @@
         member x.WritePrompt =
             ((if hasContent Alias then Alias else Host), Port) ||> printf "%s:%d> " 
 
-        member x.StartRead =
-            let buffer: byte [] = Array.zeroCreate BufferSize
-            let read = socketStream.Read(buffer, 0, buffer.Length)
-            inBuffer.Write(buffer, 0, read)
+        member x.StartRead() = 
+            let message = x.ParseLine (x.ReadLine(), 1)
+            x.OnMessageReceive(message)
 
-            if read < buffer.Length then
-                if inBuffer.Length > 0 then
-                    inBuffer.StartRead()
-                    let s = inBuffer.ReadString()
-                    let message = ParseLine(s, 1)
-                    x.OnMessageReceive(message)
-                    inBuffer.Clear()
-            else 
-                x.StartRead
-                 
+        member x.ReadLine() =
+            let toC (o:obj) = Convert.ToChar(o)
+            let n = ref 0
+            let sb = new StringBuilder()        
+            while !n <> 10 do
+               n := socketStream.ReadByte()
+               if !n <> 13 && !n <> 10 then sb.Append(toC !n) |> ignore
+            sb.ToString()
+               
         member x.Connect password = 
             socket.NoDelay <- true
+            socket.ReceiveBufferSize <- 16000
             socket.SendTimeout <- Timeout
             socket.Connect(Host, Port)
 
@@ -94,31 +93,19 @@
 
             if hasContent password then x.AutoAuth password
         
-        member x.SendCommand(args : byte[][]) =
-            let SendBuffer() =
-                try
-                    outBuffer.StartRead()
-                    let bytes = Array.zeroCreate BufferSize
-                    let bytesRead = outBuffer.Read(bytes, 0, bytes.Length)
-                    socketStream.Write(bytes, 0, bytesRead)
-                    outBuffer.Clear()
-                    x.StartRead
-                with 
-                | :? SocketException -> socket.Close()
-
-            outBuffer.Write(Text.Encoding.ASCII.GetBytes("*" + args.Length.ToString()))
-            outBuffer.Write(EndData)
-           
-            for arg in args do
-                outBuffer.Write(Text.Encoding.ASCII.GetBytes("$" + arg.Length.ToString()))
-                outBuffer.Write(EndData)
-                outBuffer.Write(arg)
-                outBuffer.Write(EndData)
-
-            SendBuffer()
-
         member x.SendCommands(args : string[]) =
-            args |> Array.map (fun x -> Text.Encoding.ASCII.GetBytes x) |> x.SendCommand
+            let SendBuffer(command:string) =
+                let bytes = Encoding.UTF8.GetBytes(command)  
+                socketStream.Write(bytes, 0, bytes.Length)
+
+            let sb = new StringBuilder()
+            sb.Append("*" + args.Length.ToString() + "\r\n") |> ignore
+            args 
+            |> Array.iter (fun item -> sb.Append("$" + item.Length.ToString() + "\r\n") |> ignore
+                                       sb.Append(item.ToString() + "\r\n") |> ignore)
+
+            SendBuffer(sb.ToString())
+            x.StartRead()
 
         member x.AutoAuth password =
             x.WritePrompt
@@ -147,7 +134,6 @@
              if (disposing) then
                 x.OnDisconnecting
                 socket.Close()
-                outBuffer.Dispose()
                 socketStream.Dispose()
         
         interface System.IDisposable with 

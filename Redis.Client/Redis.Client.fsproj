@@ -54,13 +54,6 @@
     <Compile Include="Program.fs" />
     <None Include="App.config" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Redis.Client.Utilities\Redis.Client.Utilities.csproj">
-      <Name>Redis.Client.Utilities</Name>
-      <Project>{f9c9d95b-6908-4497-a1d4-5ae7a622cb51}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-  </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
   </PropertyGroup>
