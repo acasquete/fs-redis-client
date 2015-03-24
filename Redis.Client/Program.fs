@@ -35,17 +35,17 @@ let getArgument (index) (name: string) (defaultValue) (args:string[]) =
         ConfigurationManager.AppSettings.[name]
     else defaultValue
 
-let messageReceived (args:RedisMessageReceiveEventArgs<string>) =
+let messageReceived (message) =
     let foregroundColor = Console.ForegroundColor
     let messageColor = 
-        match args.Message with
+        match message with
         | Prefix "(error)" _ -> ConsoleColor.Red
         | Prefix "(nil)" _   -> ConsoleColor.Blue
         | Prefix "+" _       -> ConsoleColor.Green
         | _                  -> ConsoleColor.DarkGray
 
     Console.ForegroundColor <- messageColor
-    parseResponse(args.Message) |> printfn "%s"
+    parseResponse(message) |> printfn "%s"
     Console.ForegroundColor <- foregroundColor
 
 [<EntryPoint>]

@@ -8,26 +8,15 @@
     open System.Threading
     open Redis.Client.Net.Common
 
-    type RedisMessageReceiveEventArgs<'a>(message : string) =
-        inherit System.EventArgs()
-        member x.Message = message
-
-    type RedisMessageDelegate<'a> = 
-        delegate of obj * RedisMessageReceiveEventArgs<'a> -> unit
-
     type RedisConnection(host, port, timeout, useSsl, alias) = 
-        let BufferSize = 16 * 1024
         let socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
         let mutable socketStream : Stream = null
         let Host  : string = host
         let Port  : int = port
         let Alias : string = alias
         let Timeout = timeout
-        let useSsl = useSsl
-
-        let connectingEventArgsEvent = new Event<_>()
-        let disconnectingEventArgsEvent = new Event<_>()
-        let customEventHandlerEvent = new Event<RedisMessageDelegate<string>, RedisMessageReceiveEventArgs<string>>()
+        let useSsl  = useSsl
+        let messageReceivedEvent = new Event<string>()
 
         member x.ParseLine (line, tabs) =
             let ParseNext() = 
@@ -49,7 +38,7 @@
             | Prefix ":" rest -> sprintf "(integer) %s" rest
             | Prefix "-" rest when tabs = 1 -> sprintf "(error) %s" rest
             | Prefix "+" rest when tabs > 1 -> rest
-            | line -> sprintf "%s" line
+            | line            -> sprintf "%s" line
 
         member x.WritePrompt =
             ((if hasContent Alias then Alias else Host), Port) ||> printf "%s:%d> " 
@@ -59,12 +48,11 @@
             x.OnMessageReceive(message)
 
         member x.ReadLine() =
-            let toC (o:obj) = Convert.ToChar(o)
             let n = ref 0
             let sb = new StringBuilder()        
             while !n <> 10 do
                n := socketStream.ReadByte()
-               if !n <> 13 && !n <> 10 then sb.Append(toC !n) |> ignore
+               if !n <> 13 && !n <> 10 then sb.Append(char !n) |> ignore
             sb.ToString()
                
         member x.Connect password = 
@@ -73,8 +61,7 @@
             socket.SendTimeout <- Timeout
             socket.Connect(Host, Port)
 
-            if socket.Connected = false then
-                socket.Close()
+            if socket.Connected = false then socket.Close()
 
             socketStream <- new NetworkStream(socket)
                 
@@ -86,8 +73,6 @@
                     raise <| System.Exception("Could not establish an encrypted connection to " + Host)
 
                 socketStream <- sslStream
-
-            x.OnConnecting
 
             if hasContent password then x.AutoAuth password
         
@@ -101,7 +86,6 @@
             args 
             |> Array.iter (fun item -> sb.Append("$" + string item.Length + "\r\n") |> ignore
                                        sb.Append(item + "\r\n") |> ignore)
-
             sb |> string |> SendBuffer
             x.StartRead()
 
@@ -111,26 +95,12 @@
             [|"AUTH"; password|] |> x.SendCommands
 
         [<CLIEvent>]
-        member x.Connecting = connectingEventArgsEvent.Publish
-       
-        [<CLIEvent>]
-        member x.Disconnecting = disconnectingEventArgsEvent.Publish
-
-        [<CLIEvent>]
-        member x.MessageReceived = customEventHandlerEvent.Publish
+        member x.MessageReceived = messageReceivedEvent.Publish
  
-        member x.OnConnecting =
-            connectingEventArgsEvent.Trigger()
-
-        member x.OnDisconnecting =
-            disconnectingEventArgsEvent.Trigger()
-
-        member x.OnMessageReceive message =
-            customEventHandlerEvent.Trigger(x, new RedisMessageReceiveEventArgs<_>(message))
+        member x.OnMessageReceive message = messageReceivedEvent.Trigger(message)
 
         member x.Dispose(disposing) = 
              if (disposing) then
-                x.OnDisconnecting
                 socket.Close()
                 socketStream.Dispose()
         
