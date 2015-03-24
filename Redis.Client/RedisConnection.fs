@@ -51,7 +51,7 @@
             | Prefix ":" rest -> sprintf "(integer) %s" rest
             | Prefix "-" rest when tabs = 1 -> sprintf "(error) %s" rest
             | Prefix "+" rest when tabs > 1 -> rest
-            | line -> sprintf "%s" line + (ParseNext())
+            | line -> sprintf "%s" line
 
         member x.WritePrompt =
             ((if hasContent Alias then Alias else Host), Port) ||> printf "%s:%d> " 
