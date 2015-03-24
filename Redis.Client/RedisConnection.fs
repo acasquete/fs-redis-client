@@ -21,8 +21,8 @@
         let EndData = [| byte('\r'); byte('\n') |]
         let outBuffer = new ByteBuffer()
         let inBuffer = new ByteBuffer()
+        let socket : Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
 
-        let mutable socket : Socket = null
         let mutable socketStream : Stream = null
 
         let Host  : string = host
@@ -72,7 +72,6 @@
                 x.StartRead
                  
         member x.Connect password = 
-            socket <- new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
             socket.NoDelay <- true
             socket.SendTimeout <- Timeout
             socket.Connect(Host, Port)
@@ -86,10 +85,10 @@
                 let sslStream = new SslStream(socketStream, false, null, null)
                 sslStream.AuthenticateAsClient(Host)
 
-                if (sslStream.IsEncrypted = false) then
-                    raise (System.Exception("Could not establish an encrypted connection to " + Host))
+                if sslStream.IsEncrypted = false then
+                    raise <| System.Exception("Could not establish an encrypted connection to " + Host)
 
-                socketStream <- sslStream;
+                socketStream <- sslStream
 
             x.OnConnecting
 
@@ -118,8 +117,8 @@
 
             SendBuffer()
 
-        member x.SendCommands(args) =
-            x.SendCommand(args.ToByteArrays())
+        member x.SendCommands(args : string[]) =
+            args |> Array.map (fun x -> Text.Encoding.ASCII.GetBytes x) |> x.SendCommand
 
         member x.AutoAuth password =
             x.WritePrompt
@@ -153,5 +152,5 @@
         
         interface System.IDisposable with 
             member x.Dispose() = 
-                x.Dispose(true);
-                GC.SuppressFinalize(x);
+                x.Dispose(true)
+                GC.SuppressFinalize(x)

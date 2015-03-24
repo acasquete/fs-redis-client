@@ -4,7 +4,7 @@ open System.Configuration
 open Redis.Client.Net.Common
 
 let parseCommand (line:string) = 
-    line.Split(' ') //TODO: Parse quotes
+    line.Trim().Split(' ') //TODO: Parse quotes
 
 let parseResponse (line:string) = 
     match line with
@@ -17,7 +17,7 @@ let rec readCommand (redis:RedisConnection) =
 
     match command with
     | c when notHasContent c -> ()
-    | c when command.ToUpper() = "QUIT" -> ()
+    | c when command.ToUpper() = "QUIT" -> () //TODO: Fix exit
     | c when command.ToUpper() = "CLEAR" -> Console.Clear()
     | c -> c |> parseCommand |> redis.SendCommands
        
