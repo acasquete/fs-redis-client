@@ -99,7 +99,7 @@
             let SendBuffer() =
                 try
                     outBuffer.StartRead()
-                    let bytes: byte [] = Array.zeroCreate BufferSize
+                    let bytes = Array.zeroCreate BufferSize
                     let bytesRead = outBuffer.Read(bytes, 0, bytes.Length)
                     socketStream.Write(bytes, 0, bytesRead)
                     outBuffer.Clear()
