@@ -17,7 +17,7 @@ let parseResponse (line:string) =
     | _ -> line
 
 let rec readCommand (redis:RedisConnection) = 
-    redis.WritePrompt
+    redis.WritePrompt()
     let command = Console.ReadLine()
 
     match command with
@@ -41,7 +41,7 @@ let messageReceived (message) =
         match message with
         | Prefix "(error)" _ -> ConsoleColor.Red
         | Prefix "(nil)" _   -> ConsoleColor.Blue
-        | Prefix "+" _       -> ConsoleColor.Green
+        | Prefix "+" _       -> ConsoleColor.DarkGreen
         | _                  -> ConsoleColor.DarkGray
 
     Console.ForegroundColor <- messageColor

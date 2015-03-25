@@ -18,16 +18,26 @@
         let useSsl  = useSsl
         let messageReceivedEvent = new Event<string>()
 
-        member x.ParseLine (line, tabs) =
-            let ParseNext() = 
-                x.ParseLine(x.ReadLine(), tabs + 1)
+        let OnMessageReceive message = messageReceivedEvent.Trigger(message)
+
+        let readLine() =
+            let n = ref 0
+            let sb = new StringBuilder()        
+            while !n <> 10 do
+               n := socketStream.ReadByte()
+               if !n <> 13 && !n <> 10 then sb.Append(char !n) |> ignore
+            sb.ToString()
+
+        let rec parseLine (line, tabs) =
+            let parseNext() = 
+                parseLine(readLine(), tabs + 1)
 
             let NestedArray size = // TODO: Fix tabs (nested arrays??)
-                [| for i in 1..size -> sprintf "%s%s%d) %s" (if i>1 then "\n" else "") (String.replicate tabs " ") i (ParseNext()) |]
+                [| for i in 1..size -> sprintf "%s%s%d) %s" (if i>1 then "\n" else "") (String.replicate tabs " ") i (parseNext()) |]
 
             let NestedString size =
                 let sb = new StringBuilder()
-                while sb.Length <= size do sb.AppendLine(string <| x.ReadLine()) |> ignore
+                while sb.Length <= size do sb.AppendLine(string <| readLine()) |> ignore
                 sb.ToString().TrimEnd(char "\r", char "\n")        
 
             match line with
@@ -40,22 +50,30 @@
             | Prefix "+" rest when tabs > 1 -> rest
             | line            -> sprintf "%s" line
 
-        member x.WritePrompt =
-            ((if hasContent Alias then Alias else Host), Port) ||> printf "%s:%d> " 
+        let startRead() = 
+            let message = parseLine (readLine(), 1)
+            OnMessageReceive(message)
 
-        member x.StartRead() = 
-            let message = x.ParseLine (x.ReadLine(), 1)
-            x.OnMessageReceive(message)
+        let sendCommands(args : string[]) =
+            let sb = new StringBuilder()
+            sb.Append("*" + string args.Length + "\r\n") |> ignore
+            args 
+            |> Array.iter (fun item -> sb.Append("$" + string item.Length + "\r\n") |> ignore
+                                       sb.Append(item + "\r\n") |> ignore)
+            
+            let bytes = sb |> string |> Encoding.UTF8.GetBytes 
+            socketStream.Write(bytes, 0, bytes.Length)
+            startRead()
+ 
+        let writePrompt() =
+            ((if hasContent Alias then Alias else Host), Port) ||> printf "%s:%d> "
+ 
+        let authenticateWith password =
+            writePrompt()
+            printfn "AUTH ********"
+            [|"AUTH"; password|] |> sendCommands
 
-        member x.ReadLine() =
-            let n = ref 0
-            let sb = new StringBuilder()        
-            while !n <> 10 do
-               n := socketStream.ReadByte()
-               if !n <> 13 && !n <> 10 then sb.Append(char !n) |> ignore
-            sb.ToString()
-               
-        member x.Connect password = 
+        let connect password =
             socket.NoDelay <- true
             socket.ReceiveBufferSize <- 16000
             socket.SendTimeout <- Timeout
@@ -74,30 +92,16 @@
 
                 socketStream <- sslStream
 
-            if hasContent password then x.AutoAuth password
-        
-        member x.SendCommands(args : string[]) =
-            let SendBuffer(command:string) =
-                let bytes = Encoding.UTF8.GetBytes(command)  
-                socketStream.Write(bytes, 0, bytes.Length)
+            if password |> hasContent then authenticateWith password
 
-            let sb = new StringBuilder()
-            sb.Append("*" + string args.Length + "\r\n") |> ignore
-            args 
-            |> Array.iter (fun item -> sb.Append("$" + string item.Length + "\r\n") |> ignore
-                                       sb.Append(item + "\r\n") |> ignore)
-            sb |> string |> SendBuffer
-            x.StartRead()
+        member x.Connect = connect
 
-        member x.AutoAuth password =
-            x.WritePrompt
-            printfn "AUTH ********"
-            [|"AUTH"; password|] |> x.SendCommands
+        member x.WritePrompt() = writePrompt()
+
+        member x.SendCommands = sendCommands
 
         [<CLIEvent>]
         member x.MessageReceived = messageReceivedEvent.Publish
- 
-        member x.OnMessageReceive message = messageReceivedEvent.Trigger(message)
 
         member x.Dispose(disposing) = 
              if (disposing) then
