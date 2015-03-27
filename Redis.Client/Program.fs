@@ -62,5 +62,7 @@ let main argv =
         redis |> readCommand
         0
     with 
-        | :? System.Exception as ex -> printfn "%s" ex.Message 
-                                       0
+        | ex -> 
+            printfn "(error) %s.\nPress any key to exit." ex.Message 
+            Console.ReadKey() |> ignore
+            0
